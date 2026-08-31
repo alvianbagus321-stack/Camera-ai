@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -12,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.example.enhance.EnhanceEngineType
 import com.example.enhance.GeminiAnalysisModel
 import com.example.enhance.HordeImageModel
+import com.example.enhance.OnDevicePreset
 import com.example.viewmodel.CameraViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +43,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             Text("Gemini API Configuration", style = MaterialTheme.typography.titleMedium)
@@ -160,6 +164,45 @@ fun SettingsScreen(
                             Text(model.label, style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 model.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Preset on-device — muncul saat engine = On-device
+            if (uiState.enhanceEngineType == EnhanceEngineType.ON_DEVICE) {
+                Spacer(Modifier.height(24.dp))
+                Text("Preset On-device", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Seberapa kuat proses enhance on-device (upscale/sharpen/warna).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                OnDevicePreset.entries.forEach { preset ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = uiState.onDevicePreset == preset,
+                                onClick = { viewModel.setOnDevicePreset(preset) }
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = uiState.onDevicePreset == preset,
+                            onClick = { viewModel.setOnDevicePreset(preset) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(preset.label, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                preset.description,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

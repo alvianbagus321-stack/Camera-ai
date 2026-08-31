@@ -15,6 +15,7 @@ import com.example.enhance.EnhanceEngineFactory
 import com.example.enhance.EnhanceEngineType
 import com.example.enhance.GeminiAnalysisModel
 import com.example.enhance.HordeImageModel
+import com.example.enhance.OnDevicePreset
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import java.io.File
@@ -56,6 +57,7 @@ data class CameraUiState(
     val hordeApiKey: String = "",
     val hordeModel: HordeImageModel = HordeImageModel.FLUX,
     val geminiModel: GeminiAnalysisModel = GeminiAnalysisModel.GEMINI_1_5_PRO,
+    val onDevicePreset: OnDevicePreset = OnDevicePreset.STANDARD,
     val isEnhancing: Boolean = false,
     val enhanceStatus: String? = null,
     val enhanceError: String? = null,
@@ -88,11 +90,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val geminiModel = prefs.getString("GEMINI_MODEL", null)
             ?.let { saved -> GeminiAnalysisModel.entries.firstOrNull { it.name == saved } }
             ?: GeminiAnalysisModel.GEMINI_1_5_PRO
+        val onDevicePreset = prefs.getString("ON_DEVICE_PRESET", null)
+            ?.let { saved -> OnDevicePreset.entries.firstOrNull { it.name == saved } }
+            ?: OnDevicePreset.STANDARD
         _uiState.value = _uiState.value.copy(
             apiKey = initialKey,
             hordeApiKey = hordeKey,
             hordeModel = hordeModel,
-            geminiModel = geminiModel
+            geminiModel = geminiModel,
+            onDevicePreset = onDevicePreset
         )
     }
 
@@ -118,6 +124,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setGeminiModel(model: GeminiAnalysisModel) {
         prefs.edit().putString("GEMINI_MODEL", model.name).apply()
         _uiState.value = _uiState.value.copy(geminiModel = model)
+    }
+
+    fun setOnDevicePreset(preset: OnDevicePreset) {
+        prefs.edit().putString("ON_DEVICE_PRESET", preset.name).apply()
+        _uiState.value = _uiState.value.copy(onDevicePreset = preset, enhanceError = null)
     }
 
     fun setReferenceUri(uri: Uri?) {
@@ -153,7 +164,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val engine = EnhanceEngineFactory.create(_uiState.value.enhanceEngineType)
+                val engine = EnhanceEngineFactory.create(
+                    type = _uiState.value.enhanceEngineType,
+                    onDevicePreset = _uiState.value.onDevicePreset
+                )
                 // Data awal: foto wide.
                 val source = loadBitmapFromUri(wideUri)
                     ?: throw RuntimeException("Gagal membaca foto wide (data awal).")

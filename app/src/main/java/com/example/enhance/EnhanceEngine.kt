@@ -61,8 +61,11 @@ interface EnhanceEngine {
 
 /** Factory sederhana untuk membuat engine sesuai jenisnya. */
 object EnhanceEngineFactory {
-    fun create(type: EnhanceEngineType): EnhanceEngine = when (type) {
-        EnhanceEngineType.ON_DEVICE -> OnDeviceEnhancer()
+    fun create(
+        type: EnhanceEngineType,
+        onDevicePreset: OnDevicePreset = OnDevicePreset.STANDARD
+    ): EnhanceEngine = when (type) {
+        EnhanceEngineType.ON_DEVICE -> OnDeviceEnhancer(onDevicePreset)
         EnhanceEngineType.STABLE_HORDE -> StableHordeEnhancer()
     }
 }

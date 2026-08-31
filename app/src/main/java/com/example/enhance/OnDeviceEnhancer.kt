@@ -16,12 +16,11 @@ import kotlinx.coroutines.withContext
  *  3. Unsharp mask untuk menajamkan detail.
  *  4. Boosting saturasi + kurva tone kontras.
  */
-class OnDeviceEnhancer : EnhanceEngine {
+class OnDeviceEnhancer(
+    private val preset: OnDevicePreset = OnDevicePreset.STANDARD
+) : EnhanceEngine {
 
     override val type: EnhanceEngineType = EnhanceEngineType.ON_DEVICE
-
-    // Sisi panjang target (px) untuk hasil upscale.
-    private val targetLongSide = 2048
 
     override suspend fun enhance(
         context: Context,
@@ -35,27 +34,27 @@ class OnDeviceEnhancer : EnhanceEngine {
         val gains = computeWhiteBalanceGains(source, reference)
 
         onStatus("Menaikkan resolusi…")
-        var bmp = resizeBilinear(source, targetSize(source.width, source.height))
+        var bmp = resizeBilinear(source, targetSize(source.width, source.height, preset.targetLongSide))
 
         onStatus("Menajamkan detail…")
-        bmp = unsharpMask(bmp, radius = 3, amount = 0.55f)
+        bmp = unsharpMask(bmp, radius = preset.sharpenRadius, amount = preset.sharpenAmount)
 
         onStatus("Mengoreksi warna & tone…")
         bmp = applyWhiteBalance(bmp, gains)
-        bmp = applySaturation(bmp, 1.12f)
-        bmp = applyToneCurve(bmp)
+        bmp = applySaturation(bmp, preset.saturation)
+        bmp = applyToneCurve(bmp, preset.contrast)
 
         val note = if (reference != null) {
-            "Dinaikkan kualitasnya on-device: resolusi + detail, warna disesuaikan dengan referensi 1x."
+            "Dinaikkan kualitasnya on-device (${preset.label}): resolusi + detail, warna disesuaikan dengan referensi 1x."
         } else {
-            "Dinaikkan kualitasnya on-device: resolusi + detail + koreksi warna (tanpa referensi 1x)."
+            "Dinaikkan kualitasnya on-device (${preset.label}): resolusi + detail + koreksi warna (tanpa referensi 1x)."
         }
         EnhanceResult(bitmap = bmp, engine = type, note = note)
     }
 
     // ---- Target size -----------------------------------------------------
 
-    private fun targetSize(w: Int, h: Int): Pair<Int, Int> {
+    private fun targetSize(w: Int, h: Int, targetLongSide: Int): Pair<Int, Int> {
         val longSide = max(w, h)
         if (longSide >= targetLongSide) return w to h
         val scale = targetLongSide.toFloat() / longSide
@@ -300,14 +299,13 @@ class OnDeviceEnhancer : EnhanceEngine {
     }
 
     /** Kurva tone S sederhana: kontras halus di sekitar midtone + soft rolloff highlight/shadow. */
-    private fun applyToneCurve(src: Bitmap): Bitmap {
+    private fun applyToneCurve(src: Bitmap, contrast: Float): Bitmap {
         val w = src.width
         val h = src.height
         val pixels = IntArray(w * h)
         src.getPixels(pixels, 0, w, 0, 0, w, h)
 
         // lookup table
-        val contrast = 1.08f
         val lut = IntArray(256)
         for (v in 0..255) {
             var x = v / 255f

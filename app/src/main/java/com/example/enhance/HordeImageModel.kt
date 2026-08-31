@@ -38,5 +38,20 @@ enum class HordeImageModel(
         apiIds = listOf("Deliberate"),
         label = "Deliberate",
         description = "Model SD1.5 serbaguna & realistis."
+    ),
+    DREAMSHAPER(
+        apiIds = listOf("DreamShaper XL v2.1 Turbo"),
+        label = "DreamShaper",
+        description = "Model populer untuk detail tajam & gaya cinematik."
+    ),
+    ANYTHING_DIFFUSION(
+        apiIds = listOf("Anything Diffusion"),
+        label = "Anything Diffusion",
+        description = "Model SD1.5 yang serbaguna, baik untuk anime & realistis."
+    ),
+    REALVIS_V5(
+        apiIds = listOf("RealVisXL V4.0"),
+        label = "RealVisXL",
+        description = "Model SDXL unggulan untuk foto realistis natural."
     )
 }
