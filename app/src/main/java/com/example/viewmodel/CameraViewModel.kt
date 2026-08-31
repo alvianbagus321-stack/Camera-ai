@@ -17,6 +17,7 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +57,8 @@ data class CameraUiState(
     val enhanceError: String? = null,
     val enhancedUri: Uri? = null,
     val enhanceNote: String? = null,
-    val referenceUri: Uri? = null
+    val referenceUri: Uri? = null,
+    val zoomRatio: Float = 1f
 )
 
 data class AnalysisResult(
@@ -98,12 +100,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Menjalankan engine enhance terpilih pada foto terakhir yang diambil.
-     * Foto referensi 1x (bila ada) dipakai engine on-device untuk white-balance.
+     * Menjalankan engine enhance. Alur mengikuti konsep aplikasi:
+     *  1. Foto wide/1x adalah DATA awal (sumber).
+     *  2. Foto "zoom" hanyalah crop dari foto wide.
+     *  3. Enhance diproses pada foto wide, lalu bagian zoom di-crop dari hasilnya.
+     *     Jadi hasil zoom memakai semua data foto wide (resolusi & konteks penuh).
      */
     fun enhanceImage() {
-        val uri = _uiState.value.lastCapturedUri ?: return
         if (_uiState.value.isEnhancing) return
+        val zoomRatio = _uiState.value.zoomRatio
+        val wideUri = _uiState.value.referenceUri ?: _uiState.value.lastCapturedUri ?: return
 
         _uiState.value = _uiState.value.copy(
             isEnhancing = true,
@@ -116,20 +122,27 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val engine = EnhanceEngineFactory.create(_uiState.value.enhanceEngineType)
-                val source = loadBitmapFromUri(uri)
-                    ?: throw RuntimeException("Gagal membaca foto sumber.")
-                val reference = _uiState.value.referenceUri?.let { loadBitmapFromUri(it) }
+                // Data awal: foto wide.
+                val source = loadBitmapFromUri(wideUri)
+                    ?: throw RuntimeException("Gagal membaca foto wide (data awal).")
 
                 val result = engine.enhance(
                     context = getApplication(),
                     source = source,
-                    reference = reference,
+                    reference = null,
                     apiKey = _uiState.value.hordeApiKey
                 ) { status ->
                     _uiState.value = _uiState.value.copy(enhanceStatus = status)
                 }
 
-                val savedUri = saveBitmapToCache(result.bitmap)
+                // Ambil wilayah "zoom" dari hasil enhance wide, lalu upscale.
+                val enhanced = if (zoomRatio > 1.05f) {
+                    cropZoomRegion(result.bitmap, zoomRatio)
+                } else {
+                    result.bitmap
+                }
+
+                val savedUri = saveBitmapToCache(enhanced)
                 _uiState.value = _uiState.value.copy(
                     isEnhancing = false,
                     enhancedUri = savedUri,
@@ -143,6 +156,30 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     enhanceStatus = null
                 )
             }
+        }
+    }
+
+    /** Crop bagian tengah [bmp] sesuai [zoomRatio] lalu upscale ke sisi panjang 2048. */
+    private fun cropZoomRegion(bmp: Bitmap, zoomRatio: Float): Bitmap {
+        val w = bmp.width
+        val h = bmp.height
+        val factor = zoomRatio.coerceIn(1.001f, 10f)
+        val cropSide = 1f / factor
+        val cw = (w * cropSide).toInt().coerceAtLeast(1)
+        val ch = (h * cropSide).toInt().coerceAtLeast(1)
+        val left = (w - cw) / 2
+        val top = (h - ch) / 2
+        val crop = Bitmap.createBitmap(bmp, left, top, cw, ch)
+
+        val targetLong = 2048
+        val longSide = max(cw, ch)
+        return if (longSide < targetLong) {
+            val scale = targetLong.toFloat() / longSide
+            val nw = (cw * scale).toInt().coerceAtLeast(1)
+            val nh = (ch * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(crop, nw, nh, true)
+        } else {
+            crop
         }
     }
 
@@ -299,11 +336,62 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
-    fun onPhotoCaptured(uri: Uri) {
-        _uiState.value = _uiState.value.copy(lastCapturedUri = uri, analysisResult = null, error = null)
-        if (_uiState.value.isAiEnabled) {
-            analyzeImage(uri)
+    fun onPhotoCaptured(uri: Uri, zoomRatio: Float = 1f) {
+        // Foto yang benar-benar diambil selalu foto WIDE / 1x (data awal).
+        // "Zoom" pada dasarnya = crop + upscale dari foto wide ini.
+        if (zoomRatio > 1.05f) {
+            val wideUri = uri
+            val zoomUri = createZoomPhoto(wideUri, zoomRatio)
+            _uiState.value = _uiState.value.copy(
+                lastCapturedUri = zoomUri,
+                referenceUri = wideUri,
+                zoomRatio = zoomRatio,
+                analysisResult = null,
+                error = null
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(
+                lastCapturedUri = uri,
+                referenceUri = null,
+                zoomRatio = 1f,
+                analysisResult = null,
+                error = null
+            )
         }
+        if (_uiState.value.isAiEnabled) {
+            analyzeImage(_uiState.value.lastCapturedUri!!)
+        }
+    }
+
+    /**
+     * Membuat gambar "zoom" = crop bagian tengah foto wide sesuai [zoomRatio], lalu
+     * di-upscale agar resolusi target tetap layak. Foto wide asli disimpan sebagai
+     * [referenceUri] (data awal) untuk dipakai enhance.
+     */
+    private fun createZoomPhoto(uri: Uri, zoomRatio: Float): Uri {
+        val bmp = loadBitmapFromUri(uri) ?: return uri
+        val w = bmp.width
+        val h = bmp.height
+        val factor = zoomRatio.coerceIn(1.001f, 10f)
+        val cropSide = 1f / factor
+        val cw = (w * cropSide).toInt().coerceAtLeast(1)
+        val ch = (h * cropSide).toInt().coerceAtLeast(1)
+        val left = (w - cw) / 2
+        val top = (h - ch) / 2
+        val crop = Bitmap.createBitmap(bmp, left, top, cw, ch)
+
+        // Upscale hasil crop ke sisi panjang target agar tetap tampak tajam
+        val targetLong = 2048
+        val longSide = max(cw, ch)
+        val result = if (longSide < targetLong) {
+            val scale = targetLong.toFloat() / longSide
+            val nw = (cw * scale).toInt().coerceAtLeast(1)
+            val nh = (ch * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(crop, nw, nh, true)
+        } else {
+            crop
+        }
+        return saveBitmapToCache(result)
     }
 
     fun clearAnalysis() {
