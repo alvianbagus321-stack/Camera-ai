@@ -28,6 +28,7 @@ class OnDeviceEnhancer : EnhanceEngine {
         source: Bitmap,
         reference: Bitmap?,
         apiKey: String,
+        modelId: String,
         onStatus: (String) -> Unit
     ): EnhanceResult = withContext(Dispatchers.Default) {
         onStatus("Membaca warna referensi 1x…")

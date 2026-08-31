@@ -46,6 +46,7 @@ class StableHordeEnhancer(
         source: Bitmap,
         reference: Bitmap?,
         apiKey: String,
+        modelId: String,
         onStatus: (String) -> Unit
     ): EnhanceResult = withContext(Dispatchers.IO) {
         val key = apiKey.ifBlank { anonymousKey }
@@ -55,7 +56,7 @@ class StableHordeEnhancer(
 
         val payload = JSONObject().apply {
             put("prompt", buildPrompt())
-            put("models", JSONArray().put("flux").put("stable_diffusion_xl"))
+            put("models", buildModelsArray(modelId))
             put("source_image", b64)
             put("source_processing", "img2img")
             put("nsfw", false)
@@ -85,6 +86,19 @@ class StableHordeEnhancer(
             note = "Dinaikkan kualitasnya oleh AI Horde (img2img, gratis, tanpa key). " +
                 "Konten asli dipertahankan, detail diperkaya."
         )
+    }
+
+    /**
+     * Membangun array model AI Horde dari [modelId] (bisa berisi beberapa id dipisah koma,
+     * sebagai fallback). Kosong → default flux + stable_diffusion_xl.
+     */
+    private fun buildModelsArray(modelId: String): JSONArray {
+        val models = JSONArray()
+        val selected = modelId.ifBlank { "flux,stable_diffusion_xl" }
+        selected.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach {
+            models.put(it)
+        }
+        return models
     }
 
     private fun buildPrompt(): String =

@@ -10,6 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.enhance.EnhanceEngineType
+import com.example.enhance.GeminiAnalysisModel
+import com.example.enhance.HordeImageModel
 import com.example.viewmodel.CameraViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,6 +130,79 @@ fun SettingsScreen(
                 ) {
                     Text("Save Horde Key")
                 }
+
+                Spacer(Modifier.height(24.dp))
+                Text("Model Generative AI Horde", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Model gambar yang dipakai saat enhance via AI Horde. Ketersediaan untuk anonim bisa berubah.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                HordeImageModel.entries.forEach { model ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = uiState.hordeModel == model,
+                                onClick = { viewModel.setHordeModel(model) }
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = uiState.hordeModel == model,
+                            onClick = { viewModel.setHordeModel(model) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(model.label, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                model.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Text("Model Analisis Gemini", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Model yang dipakai untuk analisis scene / OCR foto (bukan untuk generate gambar).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            GeminiAnalysisModel.entries.forEach { model ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = uiState.geminiModel == model,
+                            onClick = { viewModel.setGeminiModel(model) }
+                        )
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = uiState.geminiModel == model,
+                        onClick = { viewModel.setGeminiModel(model) }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(model.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            model.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(32.dp))
@@ -135,11 +210,12 @@ fun SettingsScreen(
             Text("Pro Features Info", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                "• AI Background Blur (Portrait)\n" +
-                "• Auto Object Removal\n" +
-                "• 100x Digital Zoom with Super Res\n" +
-                "• Cinematic Log Profiling\n" +
-                "\nAll features rely on the Gemini API key.",
+                "• AI Enhance (On-device, gratis & offline)\n" +
+                "• AI Enhance (AI Horde, gratis, butuh internet)\n" +
+                "• Analisis scene / OCR (Gemini)\n" +
+                "• 100x Digital Zoom (crop dari wide)\n" +
+                "• Model switcher untuk engine, AI Horde, dan Gemini\n" +
+                "\nMode AI bisa dinonaktifkan lewat tombol AI di layar kamera.",
                 style = MaterialTheme.typography.bodyMedium
             )
         }

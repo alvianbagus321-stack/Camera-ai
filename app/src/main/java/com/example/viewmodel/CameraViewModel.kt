@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.enhance.EnhanceEngineFactory
 import com.example.enhance.EnhanceEngineType
+import com.example.enhance.GeminiAnalysisModel
+import com.example.enhance.HordeImageModel
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import java.io.File
@@ -52,6 +54,8 @@ data class CameraUiState(
     val vignette: Float = 0f,
     val enhanceEngineType: EnhanceEngineType = EnhanceEngineType.ON_DEVICE,
     val hordeApiKey: String = "",
+    val hordeModel: HordeImageModel = HordeImageModel.FLUX,
+    val geminiModel: GeminiAnalysisModel = GeminiAnalysisModel.GEMINI_1_5_PRO,
     val isEnhancing: Boolean = false,
     val enhanceStatus: String? = null,
     val enhanceError: String? = null,
@@ -78,7 +82,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val savedKey = prefs.getString("API_KEY", "") ?: ""
         val initialKey = if (savedKey.isNotEmpty()) savedKey else BuildConfig.GEMINI_API_KEY
         val hordeKey = prefs.getString("HORDE_API_KEY", "") ?: ""
-        _uiState.value = _uiState.value.copy(apiKey = initialKey, hordeApiKey = hordeKey)
+        val hordeModel = prefs.getString("HORDE_MODEL", null)
+            ?.let { saved -> HordeImageModel.entries.firstOrNull { it.name == saved } }
+            ?: HordeImageModel.FLUX
+        val geminiModel = prefs.getString("GEMINI_MODEL", null)
+            ?.let { saved -> GeminiAnalysisModel.entries.firstOrNull { it.name == saved } }
+            ?: GeminiAnalysisModel.GEMINI_1_5_PRO
+        _uiState.value = _uiState.value.copy(
+            apiKey = initialKey,
+            hordeApiKey = hordeKey,
+            hordeModel = hordeModel,
+            geminiModel = geminiModel
+        )
     }
 
     fun saveApiKey(key: String) {
@@ -93,6 +108,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun saveHordeApiKey(key: String) {
         prefs.edit().putString("HORDE_API_KEY", key).apply()
         _uiState.value = _uiState.value.copy(hordeApiKey = key)
+    }
+
+    fun setHordeModel(model: HordeImageModel) {
+        prefs.edit().putString("HORDE_MODEL", model.name).apply()
+        _uiState.value = _uiState.value.copy(hordeModel = model, enhanceError = null)
+    }
+
+    fun setGeminiModel(model: GeminiAnalysisModel) {
+        prefs.edit().putString("GEMINI_MODEL", model.name).apply()
+        _uiState.value = _uiState.value.copy(geminiModel = model)
     }
 
     fun setReferenceUri(uri: Uri?) {
@@ -137,7 +162,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     context = getApplication(),
                     source = source,
                     reference = null,
-                    apiKey = _uiState.value.hordeApiKey
+                    apiKey = _uiState.value.hordeApiKey,
+                    modelId = _uiState.value.hordeModel.apiIds.joinToString(",")
                 ) { status ->
                     _uiState.value = _uiState.value.copy(enhanceStatus = status)
                 }
@@ -423,7 +449,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 val generativeModel = GenerativeModel(
-                    modelName = "gemini-1.5-pro-latest",
+                    modelName = _uiState.value.geminiModel.modelName,
                     apiKey = apiKey
                 )
 

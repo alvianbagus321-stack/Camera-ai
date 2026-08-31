@@ -46,6 +46,7 @@ interface EnhanceEngine {
      * @param source    foto utama (mis. hasil zoom) yang mau dinaikkan kualitasnya.
      * @param reference opsional: foto 1x / wide yang dipakai sebagai referensi warna & gaya.
      * @param apiKey    kunci opsional (mis. untuk pengguna AI Horde terdaftar); boleh kosong = anonim.
+     * @param modelId   id model terpilih (spesifik untuk tiap engine, mis. model AI Horde). Boleh kosong.
      * @param onStatus  callback progres untuk ditampilkan ke UI.
      */
     suspend fun enhance(
@@ -53,6 +54,7 @@ interface EnhanceEngine {
         source: Bitmap,
         reference: Bitmap?,
         apiKey: String,
+        modelId: String = "",
         onStatus: (String) -> Unit
     ): EnhanceResult
 }
