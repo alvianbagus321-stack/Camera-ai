@@ -199,6 +199,88 @@ fun PreviewScreen(
                             .offset(x = (sliderPosition * 360).dp) // This is a rough offset, let's just use canvas for the line
                     )
                 }
+
+                // Overlay loading — ditampilkan saat AI sedang memproses foto
+                if (uiState.isEnhancing) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = uiState.enhanceStatus ?: "Memproses foto dengan AI…",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            if (uiState.enhanceEngineType == com.example.enhance.EnhanceEngineType.STABLE_HORDE) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "Mode AI Horde bisa antre lama (anonim prioritas rendah).",
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Overlay error — ditampilkan saat enhance gagal
+                if (!uiState.isEnhancing && uiState.enhanceError != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Text(
+                                text = "⚠️",
+                                style = MaterialTheme.typography.displaySmall
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "Enhance gagal",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = uiState.enhanceError ?: "",
+                                color = Color.White.copy(alpha = 0.85f),
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.clearEnhancement()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("Tutup")
+                            }
+                        }
+                    }
+                }
             }
 
             // AI Enhance status / hasil
