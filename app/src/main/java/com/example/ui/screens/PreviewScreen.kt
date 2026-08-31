@@ -91,7 +91,7 @@ fun PreviewScreen(
                 actions = {
                     IconButton(
                         onClick = { viewModel.enhanceImage() },
-                        enabled = !uiState.isEnhancing
+                        enabled = !uiState.isEnhancing && uiState.isAiEnabled
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "AI Enhance")
                     }
@@ -227,6 +227,13 @@ fun PreviewScreen(
                 Text(
                     text = uiState.enhanceNote,
                     color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else if (!uiState.isAiEnabled) {
+                Text(
+                    text = "Mode AI dinonaktifkan. Nyalakan tombol AI di layar kamera untuk memakai AI Enhance.",
+                    color = Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(16.dp)
                 )

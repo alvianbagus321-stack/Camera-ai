@@ -108,6 +108,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun enhanceImage() {
         if (_uiState.value.isEnhancing) return
+        if (!_uiState.value.isAiEnabled) {
+            _uiState.value = _uiState.value.copy(
+                enhanceError = "Mode AI dinonaktifkan. Aktifkan tombol AI di layar kamera untuk enhance.",
+                enhanceStatus = null
+            )
+            return
+        }
         val zoomRatio = _uiState.value.zoomRatio
         val wideUri = _uiState.value.referenceUri ?: _uiState.value.lastCapturedUri ?: return
 
