@@ -604,7 +604,36 @@ fun CameraScreen(
                 text = "${String.format(Locale.US, "%.1f", zoomRatio)}x AI Zoom", 
                 color = Color.White, 
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            // 1x Reference capture: ambil foto wide (1x) sebagai referensi warna/data untuk enhance
+            FilterChip(
+                selected = uiState.referenceUri != null,
+                onClick = {
+                    imageCapture?.let { ic ->
+                        if (uiState.isEnhancing) return@let
+                        val originalZoom = zoomRatio
+                        cameraControl?.setZoomRatio(1.0f)
+                        takePhoto(
+                            imageCapture = ic,
+                            context = context,
+                            onImageCaptured = { uri ->
+                                viewModel.setReferenceUri(uri)
+                                cameraControl?.setZoomRatio(originalZoom)
+                            },
+                            onError = {
+                                cameraControl?.setZoomRatio(originalZoom)
+                                Log.e("CameraScreen", "Reference capture failed", it)
+                            }
+                        )
+                    }
+                },
+                label = { Text(if (uiState.referenceUri != null) "1x Ref ✓" else "1x Ref") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                modifier = Modifier.padding(bottom = 8.dp)
             )
 
             // Camera Actions

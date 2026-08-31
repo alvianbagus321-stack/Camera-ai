@@ -89,7 +89,13 @@ fun PreviewScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO Save to Gallery */ }) {
+                    IconButton(
+                        onClick = { viewModel.enhanceImage() },
+                        enabled = !uiState.isEnhancing
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI Enhance")
+                    }
+                    IconButton(onClick = { viewModel.saveToGallery() }) {
                         Icon(Icons.Default.Save, contentDescription = "Save")
                     }
                 },
@@ -134,8 +140,9 @@ fun PreviewScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                val hasAdjustments = uiState.isAiEnabled || uiState.brightness != 0f || uiState.contrast != 1f || uiState.saturation != 1f || uiState.tint != 0f || uiState.vignette != 0f || uiState.isHdrEnabled
-                // Enhanced Image (clipped by slider)
+                val hasEnhancedResult = uiState.enhancedUri != null
+                val hasAdjustments = hasEnhancedResult || uiState.isAiEnabled || uiState.brightness != 0f || uiState.contrast != 1f || uiState.saturation != 1f || uiState.tint != 0f || uiState.vignette != 0f || uiState.isHdrEnabled
+                // Enhanced Image (clipped by slider) — hasil AI Enhance jika ada, selain itu efek warna manual
                 if (hasAdjustments) {
                     Box(
                         modifier = Modifier
@@ -146,15 +153,24 @@ fun PreviewScreen(
                                 }
                             }
                     ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = uri),
-                            contentDescription = "Enhanced",
-                            contentScale = ContentScale.Fit,
-                            colorFilter = ColorFilter.colorMatrix(manualColorMatrix),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        
-                        if (uiState.vignette > 0f) {
+                        if (hasEnhancedResult) {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = uiState.enhancedUri),
+                                contentDescription = "Enhanced",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = uri),
+                                contentDescription = "Enhanced",
+                                contentScale = ContentScale.Fit,
+                                colorFilter = ColorFilter.colorMatrix(manualColorMatrix),
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        if (uiState.vignette > 0f && !hasEnhancedResult) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 val radius = size.minDimension / 2f
                                 drawRect(
@@ -166,7 +182,7 @@ fun PreviewScreen(
                                 )
                             }
                         }
-                        
+
                         if (uiState.isCinematicMode) {
                             Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.15f).background(Color.Black).align(Alignment.TopCenter))
                             Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.15f).background(Color.Black).align(Alignment.BottomCenter))
@@ -183,6 +199,37 @@ fun PreviewScreen(
                             .offset(x = (sliderPosition * 360).dp) // This is a rough offset, let's just use canvas for the line
                     )
                 }
+            }
+
+            // AI Enhance status / hasil
+            if (uiState.isEnhancing) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = uiState.enhanceStatus ?: "Menyiapkan…",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else if (uiState.enhanceError != null) {
+                Text(
+                    text = "Enhance Error: ${uiState.enhanceError}",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else if (uiState.enhanceNote != null) {
+                Text(
+                    text = uiState.enhanceNote,
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
 
             // AI Analysis Results Panel

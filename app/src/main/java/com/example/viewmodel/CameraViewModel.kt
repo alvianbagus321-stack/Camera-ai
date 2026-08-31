@@ -5,11 +5,19 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
+import com.example.enhance.EnhanceEngineFactory
+import com.example.enhance.EnhanceEngineType
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import java.io.File
+import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +48,15 @@ data class CameraUiState(
     val videoQuality: androidx.camera.video.Quality = androidx.camera.video.Quality.HIGHEST,
     val videoFps: Int = 30,
     val tint: Float = 0f,
-    val vignette: Float = 0f
+    val vignette: Float = 0f,
+    val enhanceEngineType: EnhanceEngineType = EnhanceEngineType.ON_DEVICE,
+    val hordeApiKey: String = "",
+    val isEnhancing: Boolean = false,
+    val enhanceStatus: String? = null,
+    val enhanceError: String? = null,
+    val enhancedUri: Uri? = null,
+    val enhanceNote: String? = null,
+    val referenceUri: Uri? = null
 )
 
 data class AnalysisResult(
@@ -59,12 +75,139 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     init {
         val savedKey = prefs.getString("API_KEY", "") ?: ""
         val initialKey = if (savedKey.isNotEmpty()) savedKey else BuildConfig.GEMINI_API_KEY
-        _uiState.value = _uiState.value.copy(apiKey = initialKey)
+        val hordeKey = prefs.getString("HORDE_API_KEY", "") ?: ""
+        _uiState.value = _uiState.value.copy(apiKey = initialKey, hordeApiKey = hordeKey)
     }
 
     fun saveApiKey(key: String) {
         prefs.edit().putString("API_KEY", key).apply()
         _uiState.value = _uiState.value.copy(apiKey = key)
+    }
+
+    fun setEnhanceEngine(type: EnhanceEngineType) {
+        _uiState.value = _uiState.value.copy(enhanceEngineType = type, enhanceError = null)
+    }
+
+    fun saveHordeApiKey(key: String) {
+        prefs.edit().putString("HORDE_API_KEY", key).apply()
+        _uiState.value = _uiState.value.copy(hordeApiKey = key)
+    }
+
+    fun setReferenceUri(uri: Uri?) {
+        _uiState.value = _uiState.value.copy(referenceUri = uri)
+    }
+
+    /**
+     * Menjalankan engine enhance terpilih pada foto terakhir yang diambil.
+     * Foto referensi 1x (bila ada) dipakai engine on-device untuk white-balance.
+     */
+    fun enhanceImage() {
+        val uri = _uiState.value.lastCapturedUri ?: return
+        if (_uiState.value.isEnhancing) return
+
+        _uiState.value = _uiState.value.copy(
+            isEnhancing = true,
+            enhanceError = null,
+            enhanceStatus = "Menyiapkan…",
+            enhancedUri = null,
+            enhanceNote = null
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val engine = EnhanceEngineFactory.create(_uiState.value.enhanceEngineType)
+                val source = loadBitmapFromUri(uri)
+                    ?: throw RuntimeException("Gagal membaca foto sumber.")
+                val reference = _uiState.value.referenceUri?.let { loadBitmapFromUri(it) }
+
+                val result = engine.enhance(
+                    context = getApplication(),
+                    source = source,
+                    reference = reference,
+                    apiKey = _uiState.value.hordeApiKey
+                ) { status ->
+                    _uiState.value = _uiState.value.copy(enhanceStatus = status)
+                }
+
+                val savedUri = saveBitmapToCache(result.bitmap)
+                _uiState.value = _uiState.value.copy(
+                    isEnhancing = false,
+                    enhancedUri = savedUri,
+                    enhanceStatus = "Selesai.",
+                    enhanceNote = result.note
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isEnhancing = false,
+                    enhanceError = e.localizedMessage ?: "Enhance gagal.",
+                    enhanceStatus = null
+                )
+            }
+        }
+    }
+
+    fun clearEnhancement() {
+        _uiState.value = _uiState.value.copy(
+            enhancedUri = null,
+            enhanceNote = null,
+            enhanceStatus = null,
+            enhanceError = null
+        )
+    }
+
+    /** Menyimpan hasil enhance (atau foto asli bila belum di-enhance) ke galeri. */
+    fun saveToGallery() {
+        val uri = _uiState.value.enhancedUri ?: _uiState.value.lastCapturedUri ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bmp = loadBitmapFromUri(uri)
+                    ?: throw RuntimeException("Gagal membaca foto untuk disimpan.")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    saveBitmapToMediaStore(getApplication(), bmp)
+                } else {
+                    throw RuntimeException("Simpan ke galeri perlu Android 10+.")
+                }
+                _uiState.value = _uiState.value.copy(enhanceStatus = "Tersimpan ke Galeri.")
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    enhanceError = e.localizedMessage ?: "Gagal menyimpan."
+                )
+            }
+        }
+    }
+
+    private fun saveBitmapToCache(bmp: Bitmap): Uri {
+        val file = File(
+            getApplication<Application>().cacheDir,
+            "enhanced_${System.currentTimeMillis()}.jpg"
+        )
+        FileOutputStream(file).use { out ->
+            bmp.compress(Bitmap.CompressFormat.JPEG, 92, out)
+        }
+        return Uri.fromFile(file)
+    }
+
+    private fun saveBitmapToMediaStore(context: Context, bmp: Bitmap) {
+        val resolver = context.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "AI_${System.currentTimeMillis()}.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_PICTURES + "/AI Camera"
+            )
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val item = resolver.insert(collection, values)
+            ?: throw RuntimeException("Gagal membuat file di galeri.")
+        resolver.openOutputStream(item).use { out ->
+            if (out == null) throw RuntimeException("Gagal membuka output.")
+            bmp.compress(Bitmap.CompressFormat.JPEG, 92, out)
+        }
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(item, values, null, null)
     }
 
     fun toggleAi() {
