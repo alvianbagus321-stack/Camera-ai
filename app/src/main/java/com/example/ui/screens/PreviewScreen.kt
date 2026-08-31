@@ -89,7 +89,13 @@ fun PreviewScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO Save to Gallery */ }) {
+                    IconButton(
+                        onClick = { viewModel.enhanceImage() },
+                        enabled = !uiState.isEnhancing && uiState.isAiEnabled
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI Enhance")
+                    }
+                    IconButton(onClick = { viewModel.saveToGallery() }) {
                         Icon(Icons.Default.Save, contentDescription = "Save")
                     }
                 },
@@ -134,8 +140,9 @@ fun PreviewScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                val hasAdjustments = uiState.isAiEnabled || uiState.brightness != 0f || uiState.contrast != 1f || uiState.saturation != 1f || uiState.tint != 0f || uiState.vignette != 0f || uiState.isHdrEnabled
-                // Enhanced Image (clipped by slider)
+                val hasEnhancedResult = uiState.enhancedUri != null
+                val hasAdjustments = hasEnhancedResult || uiState.isAiEnabled || uiState.brightness != 0f || uiState.contrast != 1f || uiState.saturation != 1f || uiState.tint != 0f || uiState.vignette != 0f || uiState.isHdrEnabled
+                // Enhanced Image (clipped by slider) — hasil AI Enhance jika ada, selain itu efek warna manual
                 if (hasAdjustments) {
                     Box(
                         modifier = Modifier
@@ -146,15 +153,24 @@ fun PreviewScreen(
                                 }
                             }
                     ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = uri),
-                            contentDescription = "Enhanced",
-                            contentScale = ContentScale.Fit,
-                            colorFilter = ColorFilter.colorMatrix(manualColorMatrix),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        
-                        if (uiState.vignette > 0f) {
+                        if (hasEnhancedResult) {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = uiState.enhancedUri),
+                                contentDescription = "Enhanced",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = uri),
+                                contentDescription = "Enhanced",
+                                contentScale = ContentScale.Fit,
+                                colorFilter = ColorFilter.colorMatrix(manualColorMatrix),
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        if (uiState.vignette > 0f && !hasEnhancedResult) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 val radius = size.minDimension / 2f
                                 drawRect(
@@ -166,7 +182,7 @@ fun PreviewScreen(
                                 )
                             }
                         }
-                        
+
                         if (uiState.isCinematicMode) {
                             Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.15f).background(Color.Black).align(Alignment.TopCenter))
                             Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.15f).background(Color.Black).align(Alignment.BottomCenter))
@@ -183,6 +199,126 @@ fun PreviewScreen(
                             .offset(x = (sliderPosition * 360).dp) // This is a rough offset, let's just use canvas for the line
                     )
                 }
+
+                // Overlay loading — ditampilkan saat AI sedang memproses foto
+                if (uiState.isEnhancing) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = uiState.enhanceStatus ?: "Memproses foto dengan AI…",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            if (uiState.enhanceEngineType == com.example.enhance.EnhanceEngineType.STABLE_HORDE) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "Mode AI Horde bisa antre lama (anonim prioritas rendah).",
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Overlay error — ditampilkan saat enhance gagal
+                if (!uiState.isEnhancing && uiState.enhanceError != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Text(
+                                text = "⚠️",
+                                style = MaterialTheme.typography.displaySmall
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "Enhance gagal",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = uiState.enhanceError ?: "",
+                                color = Color.White.copy(alpha = 0.85f),
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.clearEnhancement()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("Tutup")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // AI Enhance status / hasil
+            if (uiState.isEnhancing) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = uiState.enhanceStatus ?: "Menyiapkan…",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else if (uiState.enhanceError != null) {
+                Text(
+                    text = "Enhance Error: ${uiState.enhanceError}",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else if (uiState.enhanceNote != null) {
+                Text(
+                    text = uiState.enhanceNote,
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else if (!uiState.isAiEnabled) {
+                Text(
+                    text = "Mode AI dinonaktifkan. Nyalakan tombol AI di layar kamera untuk memakai AI Enhance.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
 
             // AI Analysis Results Panel

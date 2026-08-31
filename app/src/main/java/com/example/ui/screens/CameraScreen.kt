@@ -276,7 +276,7 @@ fun CameraScreen(
                                 context = context,
                                 onImageCaptured = { uri ->
                                     isCapturing = false
-                                    viewModel.onPhotoCaptured(uri)
+                                    viewModel.onPhotoCaptured(uri, zoomRatio)
                                     onNavigateToPreview()
                                 },
                                 onError = {
@@ -601,7 +601,7 @@ fun CameraScreen(
             }
             
             Text(
-                text = "${String.format(Locale.US, "%.1f", zoomRatio)}x AI Zoom", 
+                text = "${String.format(Locale.US, "%.1f", zoomRatio)}x Zoom (crop dari wide)", 
                 color = Color.White, 
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -677,7 +677,7 @@ fun CameraScreen(
                                             context = context,
                                             onImageCaptured = { uri ->
                                                 isCapturing = false
-                                                viewModel.onPhotoCaptured(uri)
+                                                viewModel.onPhotoCaptured(uri, zoomRatio)
                                                 onNavigateToPreview()
                                             },
                                             onError = {
