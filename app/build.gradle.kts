@@ -11,7 +11,7 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.aistudio.aicamera.bzq"
@@ -25,17 +25,16 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
-    }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      // Perangkat penandatanganan rilis hanya dipakai kalau variabel env KEYSTORE_PATH
+      // diisi. Kalau tidak diisi, build release tetap jalan (pakai debug keystore),
+      // sehingga proyek bisa langsung di-build tanpa konfigurasi tambahan.
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+      if (keystorePath != null) {
+        storeFile = file(keystorePath)
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+        keyPassword = System.getenv("KEY_PASSWORD")
+      }
     }
   }
 
@@ -44,10 +43,17 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      // Pakai upload key bila KEYSTORE_PATH di-set; selain itu fallback ke debug keystore
+      // supaya hasil "assembleRelease" tetap bisa di-install.
+      signingConfig = if (System.getenv("KEYSTORE_PATH") != null) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
+      }
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
+      // Tidak perlu menyetel signingConfig: AGP otomatis memakai (dan membuat bila belum ada)
+      // ~/.android/debug.keystore, jadi `./gradlew assembleDebug` langsung berhasil.
     }
   }
   compileOptions {
